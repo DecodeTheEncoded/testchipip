@@ -53,8 +53,8 @@ Disassembly of section .text.hang80:
 
 0000000000010094 <boot_core_hart0>:
    10094:	0005a023          	sw	zero,0(a1)
-   10098:	00001537          	lui	a0,0x1
-   1009c:	00053503          	ld	a0,0(a0) # 1000 <ROM_BASE-0xf000>
+   10098:	00004537          	lui	a0,0x4
+   1009c:	00053503          	ld	a0,0(a0) # 4000 <ROM_BASE-0xc000>
    100a0:	34151073          	csrw	mepc,a0
    100a4:	f1402573          	csrr	a0,mhartid
    100a8:	00000597          	auipc	a1,0x0

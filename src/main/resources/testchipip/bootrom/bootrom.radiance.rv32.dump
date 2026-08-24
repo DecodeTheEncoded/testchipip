@@ -4,48 +4,48 @@ bootrom.radiance.rv32.elf:     file format elf32-littleriscv
 
 Disassembly of section .text.start:
 
-00010000 <_start>:
-   10000:	00000013          	nop
-   10004:	00000013          	nop
-   10008:	00000013          	nop
-   1000c:	00000013          	nop
-   10010:	00000263          	beqz	zero,10014 <b_target_0>
+00010040 <_start>:
+   10040:	00000013          	nop
+   10044:	00000013          	nop
+   10048:	00000013          	nop
+   1004c:	00000013          	nop
+   10050:	00000263          	beqz	zero,10054 <b_target_0>
 
-00010014 <b_target_0>:
-   10014:	00001263          	bnez	zero,10018 <b_target_1>
+00010054 <b_target_0>:
+   10054:	00001263          	bnez	zero,10058 <b_target_1>
 
-00010018 <b_target_1>:
-   10018:	00000263          	beqz	zero,1001c <b_target_2>
+00010058 <b_target_1>:
+   10058:	00000263          	beqz	zero,1005c <b_target_2>
 
-0001001c <b_target_2>:
-   1001c:	00001263          	bnez	zero,10020 <b_target_3>
+0001005c <b_target_2>:
+   1005c:	00001263          	bnez	zero,10060 <b_target_3>
 
-00010020 <b_target_3>:
-   10020:	00000263          	beqz	zero,10024 <b_target_4>
+00010060 <b_target_3>:
+   10060:	00000263          	beqz	zero,10064 <b_target_4>
 
-00010024 <b_target_4>:
-   10024:	00001263          	bnez	zero,10028 <b_target_5>
+00010064 <b_target_4>:
+   10064:	00001263          	bnez	zero,10068 <b_target_5>
 
-00010028 <b_target_5>:
-   10028:	00000263          	beqz	zero,1002c <b_target_6>
+00010068 <b_target_5>:
+   10068:	00000263          	beqz	zero,1006c <b_target_6>
 
-0001002c <b_target_6>:
-   1002c:	00001263          	bnez	zero,10030 <b_target_7>
+0001006c <b_target_6>:
+   1006c:	00001263          	bnez	zero,10070 <b_target_7>
 
-00010030 <b_target_7>:
-   10030:	00000013          	nop
-   10034:	0cc0006f          	j	10100 <_hang100>
+00010070 <b_target_7>:
+   10070:	00000013          	nop
+   10074:	08c0006f          	j	10100 <_hang100>
 
-00010038 <wake_other_cores>:
-   10038:	00458613          	addi	a2,a1,4
-   1003c:	00100693          	li	a3,1
+00010078 <wake_other_cores>:
+   10078:	00458613          	addi	a2,a1,4
+   1007c:	00100693          	li	a3,1
 
-00010040 <interrupt_loop>:
-   10040:	00d62023          	sw	a3,0(a2)
-   10044:	00460613          	addi	a2,a2,4
-   10048:	ffc62683          	lw	a3,-4(a2)
-   1004c:	fe069ae3          	bnez	a3,10040 <interrupt_loop>
-   10050:	0e40006f          	j	10134 <start_exec>
+00010080 <interrupt_loop>:
+   10080:	00d62023          	sw	a3,0(a2)
+   10084:	00460613          	addi	a2,a2,4
+   10088:	ffc62683          	lw	a3,-4(a2)
+   1008c:	fe069ae3          	bnez	a3,10080 <interrupt_loop>
+   10090:	0a40006f          	j	10134 <start_exec>
 
 Disassembly of section .text.hang100:
 
@@ -62,7 +62,7 @@ Disassembly of section .text.hang100:
 
 0001011c <loop_exit>:
    1011c:	00051c63          	bnez	a0,10134 <start_exec>
-   10120:	f19ff06f          	j	10038 <wake_other_cores>
+   10120:	f59ff06f          	j	10078 <wake_other_cores>
 
 00010124 <boot_core>:
    10124:	0005a283          	lw	t0,0(a1)
@@ -82,5 +82,5 @@ Disassembly of section .text.hang100:
    10154:	00028067          	jr	t0 # 80000000 <_dtb+0x7ffefea8>
 
 00010158 <_dtb>:
-   10158:	0000                	.2byte	0x0
+   10158:	0000                	.insn	2, 0x
 	...
