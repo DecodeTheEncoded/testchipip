@@ -20,6 +20,13 @@ class WithBootAddrReg(params: BootAddrRegParams = BootAddrRegParams()) extends C
   case SubsystemInjectorKey => up(SubsystemInjectorKey) + BootAddrRegInjector
 })
 
+// Require a one-shot full-width magic write before the next boot-address write.
+class WithBootAddrRegWriteProtection(
+  protection: BootAddrRegWriteProtectionParams = BootAddrRegWriteProtectionParams())
+    extends Config((site, here, up) => {
+  case BootAddrRegKey => up(BootAddrRegKey, site).map(_.copy(writeProtection = Some(protection)))
+})
+
 // Remove the BootAddrReg from the syste. This will likely break the default bootrom
 class WithNoBootAddrReg extends Config((site, here, up) => {
   case BootAddrRegKey => None
@@ -32,11 +39,20 @@ class WithCustomBootPin(params: CustomBootPinParams = CustomBootPinParams()) ext
 
 // Specify the alternate boot addres the custom boot pin will select
 class WithCustomBootPinAltAddr(address: BigInt) extends Config((site, here, up) => {
-  case CustomBootPinKey => up(CustomBootPinKey, site).map(p => p.copy(customBootAddress = address))
+  case CustomBootPinKey => up(CustomBootPinKey, site).map(p => p.copy(
+    customBootAddress = address,
+    customBootAddresses = Nil,
+    autoBootFromReset = false))
+})
+
+// Replace the legacy trigger/address pair with a reset-time selector over four Scala parameters.
+class WithCustomBootPinAddresses(addresses: Seq[BigInt]) extends Config((site, here, up) => {
+  case CustomBootPinKey => up(CustomBootPinKey, site).map(p => p.copy(
+    customBootAddresses = addresses,
+    autoBootFromReset = true))
 })
 
 // Remove the boot-select pin from the system
 class WithNoCustomBootPin extends Config((site, here, up) => {
   case CustomBootPinKey => None
 })
-
