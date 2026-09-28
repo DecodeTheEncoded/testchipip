@@ -49,6 +49,7 @@ testchip_dtm_t::testchip_dtm_t(int argc, char** argv, bool can_have_loadmem) : d
   has_loadmem = false;
   is_loadmem = false;
   sba_read = false;
+  sba_read_active = false;
   loadarch_file = "";
   std::vector<std::string> args(argv + 1, argv + argc);
   for (auto& arg : args) {
@@ -76,7 +77,7 @@ void testchip_dtm_t::read_chunk(addr_t taddr, size_t nbytes, void* dst)
 {
   if (is_loadmem) {
     load_mem_read(taddr, nbytes, dst);
-  } else if (sba_read) {
+  } else if (sba_read_active) {
     sba_read_chunk(taddr, nbytes, dst);
   } else {
     dtm_t::read_chunk(taddr, nbytes, dst);
@@ -385,4 +386,5 @@ void testchip_dtm_t::reset()
     uint32_t one = 1;
     write_chunk(MSIP_BASE, sizeof(uint32_t), &one);
   }
+  sba_read_active = sba_read;
 }

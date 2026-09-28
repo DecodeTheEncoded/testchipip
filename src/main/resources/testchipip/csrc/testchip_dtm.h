@@ -76,8 +76,11 @@ class testchip_dtm_t : public dtm_t, public testchip_htif_t
  private:
   bool is_loadmem;
   // +dtm_sba_read=1: read target memory through the Debug Module's system-bus master instead of
-  // halting a hart and running the program buffer.
+  // halting a hart and running the program buffer. Active only once reset() has started the hart:
+  // program loading keeps the program-buffer path, because system-bus reads interleaved with it
+  // stalled the load for some register-initialization seeds.
   bool sba_read;
+  bool sba_read_active;
   std::string loadarch_file;
 
   void sba_read_chunk(addr_t taddr, size_t nbytes, void* dst);
