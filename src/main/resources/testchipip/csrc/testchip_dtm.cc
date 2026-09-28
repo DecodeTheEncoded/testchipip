@@ -48,11 +48,14 @@ testchip_dtm_t::testchip_dtm_t(int argc, char** argv, bool can_have_loadmem) : d
 {
   has_loadmem = false;
   is_loadmem = false;
+  sba_read = false;
   loadarch_file = "";
   std::vector<std::string> args(argv + 1, argv + argc);
   for (auto& arg : args) {
     if (arg.find("+loadmem=") == 0)
       has_loadmem = can_have_loadmem;
+    if (arg == "+dtm_sba_read=1")
+      sba_read = true;
     if (arg.find("+loadarch=") == 0)
       loadarch_file = arg.substr(strlen("+loadarch="));
   }
@@ -73,8 +76,42 @@ void testchip_dtm_t::read_chunk(addr_t taddr, size_t nbytes, void* dst)
 {
   if (is_loadmem) {
     load_mem_read(taddr, nbytes, dst);
+  } else if (sba_read) {
+    sba_read_chunk(taddr, nbytes, dst);
   } else {
     dtm_t::read_chunk(taddr, nbytes, dst);
+  }
+}
+
+// Reading through the program buffer halts the hart and has it access the Debug Module. A test
+// that closes the path between the hart and the Debug Module (for example a containment rail that
+// blocks the control bus until system reset) would leave that abstract command busy forever. The
+// system-bus master reads memory without involving any hart. Accesses are 32-bit, which every
+// system-bus configuration with hasBusMaster supports.
+void testchip_dtm_t::sba_read_chunk(addr_t taddr, size_t nbytes, void* dst)
+{
+  uint8_t* curr = (uint8_t*) dst;
+  if ((taddr & 3) || (nbytes & 3) || (taddr + nbytes) > (addr_t(1) << 32)) {
+    fprintf(stderr, "dtm_sba_read: unsupported read of %zu bytes at 0x%llx\n",
+            nbytes, (unsigned long long) taddr);
+    abort();
+  }
+  // sbbusyerror and sberror are write-one-to-clear.
+  write(DM_SBCS, DM_SBCS_SBREADONADDR | (2 << DM_SBCS_SBACCESS_OFFSET) |
+                 DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR);
+  for (size_t offset = 0; offset < nbytes; offset += 4) {
+    write(DM_SBADDRESS0, (uint32_t) (taddr + offset));
+    uint32_t sbcs;
+    do {
+      sbcs = read(DM_SBCS);
+    } while (sbcs & DM_SBCS_SBBUSY);
+    if (sbcs & (DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR)) {
+      fprintf(stderr, "dtm_sba_read: system-bus error sbcs=0x%08x at 0x%llx\n",
+              sbcs, (unsigned long long) (taddr + offset));
+      abort();
+    }
+    uint32_t word = read(DM_SBDATA0);
+    memcpy(curr + offset, &word, sizeof(word));
   }
 }
 
