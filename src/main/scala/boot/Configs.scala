@@ -52,6 +52,18 @@ class WithCustomBootPinAddresses(addresses: Seq[BigInt]) extends Config((site, h
     autoBootFromReset = true))
 })
 
+// Bound, verify and report the custom-boot sequence (CustomBootPinParams.hardened).
+class WithCustomBootPinHardening(responseTimeoutCycles: Int = 1024) extends Config((site, here, up) => {
+  case CustomBootPinKey => up(CustomBootPinKey, site).map(p => p.copy(
+    hardened = true,
+    responseTimeoutCycles = responseTimeoutCycles))
+})
+
+// Verification only: +custom_boot_corrupt_address=1 corrupts the written boot address.
+class WithCustomBootPinFaultInjection extends Config((site, here, up) => {
+  case CustomBootPinKey => up(CustomBootPinKey, site).map(_.copy(enableFaultInjection = true))
+})
+
 // Remove the boot-select pin from the system
 class WithNoCustomBootPin extends Config((site, here, up) => {
   case CustomBootPinKey => None
