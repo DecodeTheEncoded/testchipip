@@ -41,18 +41,23 @@ class TLSourceAdjuster(maxClients: Int, maxInFlightPerClient: Int)(implicit p: P
       def incrementId(inId: UInt) = {
         val client_oh = edgeIn.client.masters.map(_.sourceId.contains(inId))
         val offset = Mux1H(client_oh, idOffsets.map(_.S))
-        (inId.asSInt + offset).asUInt
+        // Source IDs are unsigned; preserve their high bit before adding a signed offset.
+        (inId.zext + offset).asUInt
       }
 
       def decrementId(outId: UInt) = {
         val client_oh = UIntToOH(outId >> log2Ceil(maxInFlightPerClient))
         val offset = Mux1H(client_oh, idOffsets.map(_.S))
-        (outId.asSInt - offset).asUInt
+        (outId.zext - offset).asUInt
       }
 
 
       out.a <> in.a
       out.a.bits.source := incrementId(in.a.bits.source)
+      when (in.a.fire) {
+        assert(decrementId(out.a.bits.source) === in.a.bits.source,
+          "SerialTL source ID adjustment must roundtrip")
+      }
 
       in.b <> out.b
       in.b.bits.source := decrementId(out.b.bits.source)
