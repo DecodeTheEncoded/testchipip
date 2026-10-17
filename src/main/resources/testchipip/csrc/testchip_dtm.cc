@@ -84,6 +84,14 @@ void testchip_dtm_t::read_chunk(addr_t taddr, size_t nbytes, void* dst)
   }
 }
 
+// fesvr sends all-zero chunks of the ELF here instead of to write_chunk. A load-memory model loads
+// the ELF's zero fill itself, so the program-buffer zeroing loop is skipped along with the writes.
+void testchip_dtm_t::clear_chunk(addr_t taddr, size_t nbytes)
+{
+  if (!is_loadmem)
+    dtm_t::clear_chunk(taddr, nbytes);
+}
+
 // Reading through the program buffer halts the hart and has it access the Debug Module. A test
 // that closes the path between the hart and the Debug Module (for example a containment rail that
 // blocks the control bus until system reset) would leave that abstract command busy forever. The

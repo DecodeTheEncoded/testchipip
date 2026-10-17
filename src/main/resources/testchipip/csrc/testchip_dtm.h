@@ -58,6 +58,7 @@ class testchip_dtm_t : public dtm_t, public testchip_htif_t
 
   void write_chunk(addr_t taddr, size_t nbytes, const void* src) override;
   void read_chunk(addr_t taddr, size_t nbytes, void* dst) override;
+  void clear_chunk(addr_t taddr, size_t nbytes) override;
   void load_program() {
     is_loadmem = has_loadmem;
     dtm_t::load_program();
