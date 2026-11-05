@@ -21,7 +21,12 @@ case class CustomBootPinParams(
   responseTimeoutCycles: Int = 1024,
   /** Verification only: +custom_boot_corrupt_address=1 flips bit 2 of the written boot address. The
     * hardware exists only when this is true, so no product build carries it. */
-  enableFaultInjection: Boolean = false
+  enableFaultInjection: Boolean = false,
+  /** Reset-time selection only: selector values that start no sequence. The master writes nothing
+    * and raises no MSIP, so the harts stay where reset left them (a BootROM waiting for an MSIP from
+    * a debugger or loader). Their entries in `customBootAddresses` are placeholders. Such a reset
+    * reports neither done nor failed. */
+  waitSelectors: Seq[Int] = Nil
 ) {
   val bootAddresses: Seq[BigInt] =
     if (customBootAddresses.nonEmpty) customBootAddresses else Seq(customBootAddress)
@@ -35,6 +40,10 @@ case class CustomBootPinParams(
     "reset-time custom-boot selection requires exactly four Scala-parameter addresses")
   require(responseTimeoutCycles > 0, "custom-boot response timeout must be positive")
   require(!enableFaultInjection || hardened, "custom-boot fault injection needs the hardened sequence")
+  require(waitSelectors.isEmpty || autoBootFromReset, "wait selectors need reset-time selection")
+  require(waitSelectors.forall(s => s >= 0 && s < bootAddresses.size) && waitSelectors.distinct == waitSelectors,
+    "every wait selector must name a distinct selector value")
+  require(waitSelectors.size < bootAddresses.size, "at least one selector value must boot")
 }
 
 /** Outcome of the hardened custom-boot sequence in the current reset. `step` and `cause` are valid
@@ -168,7 +177,9 @@ trait CanHavePeripheryCustomBootPin { this: BaseSubsystem =>
           is (waiting_strap) {
             when (strapSettleCount === (strapSettleCycles - 1).U) {
               selectorLatched := selectorSync1
-              state := firstWriteState
+              // A wait selector ends the sequence here: no write, no MSIP, neither done nor failed.
+              val waitSelected = params.waitSelectors.map(_.U === selectorSync1).foldLeft(false.B)(_ || _)
+              state := Mux(waitSelected, dead, firstWriteState)
             }.otherwise {
               strapSettleCount := strapSettleCount + 1.U
             }

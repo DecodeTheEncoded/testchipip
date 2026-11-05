@@ -42,14 +42,18 @@ class WithCustomBootPinAltAddr(address: BigInt) extends Config((site, here, up) 
   case CustomBootPinKey => up(CustomBootPinKey, site).map(p => p.copy(
     customBootAddress = address,
     customBootAddresses = Nil,
-    autoBootFromReset = false))
+    autoBootFromReset = false,
+    waitSelectors = Nil))
 })
 
 // Replace the legacy trigger/address pair with a reset-time selector over four Scala parameters.
-class WithCustomBootPinAddresses(addresses: Seq[BigInt]) extends Config((site, here, up) => {
+// A selector in waitSelectors starts no sequence (CustomBootPinParams.waitSelectors).
+class WithCustomBootPinAddresses(addresses: Seq[BigInt], waitSelectors: Seq[Int] = Nil)
+    extends Config((site, here, up) => {
   case CustomBootPinKey => up(CustomBootPinKey, site).map(p => p.copy(
     customBootAddresses = addresses,
-    autoBootFromReset = true))
+    autoBootFromReset = true,
+    waitSelectors = waitSelectors))
 })
 
 // Bound, verify and report the custom-boot sequence (CustomBootPinParams.hardened).
