@@ -50,6 +50,8 @@ testchip_dtm_t::testchip_dtm_t(int argc, char** argv, bool can_have_loadmem) : d
   is_loadmem = false;
   sba_read = false;
   sba_read_active = false;
+  sba_write = false;
+  sba_write_active = false;
   loadarch_file = "";
   std::vector<std::string> args(argv + 1, argv + argc);
   for (auto& arg : args) {
@@ -57,6 +59,8 @@ testchip_dtm_t::testchip_dtm_t(int argc, char** argv, bool can_have_loadmem) : d
       has_loadmem = can_have_loadmem;
     if (arg == "+dtm_sba_read=1")
       sba_read = true;
+    if (arg == "+dtm_sba_write=1")
+      sba_write = true;
     if (arg.find("+loadarch=") == 0)
       loadarch_file = arg.substr(strlen("+loadarch="));
   }
@@ -68,7 +72,7 @@ void testchip_dtm_t::write_chunk(addr_t taddr, size_t nbytes, const void* src)
 {
   if (is_loadmem) {
     load_mem_write(taddr, nbytes, src);
-  } else {
+  } else if (!(sba_write_active && sba_write_chunk(taddr, nbytes, src))) {
     dtm_t::write_chunk(taddr, nbytes, src);
   }
 }
@@ -122,6 +126,36 @@ void testchip_dtm_t::sba_read_chunk(addr_t taddr, size_t nbytes, void* dst)
     uint32_t word = read(DM_SBDATA0);
     memcpy(curr + offset, &word, sizeof(word));
   }
+}
+
+// Returns false, with nothing left to clear, when the chunk must go through the program buffer
+// instead: an unaligned chunk, or a system-bus error or busy error (a write to sbdata0 while the
+// previous one was still in flight is dropped and sets sbbusyerror).
+bool testchip_dtm_t::sba_write_chunk(addr_t taddr, size_t nbytes, const void* src)
+{
+  if ((taddr & 3) || (nbytes & 3) || (taddr + nbytes) > (addr_t(1) << 32))
+    return false;
+  const uint8_t* curr = (const uint8_t*) src;
+  // sbbusyerror and sberror are write-one-to-clear.
+  write(DM_SBCS, DM_SBCS_SBAUTOINCREMENT | (2 << DM_SBCS_SBACCESS_OFFSET) |
+                 DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR);
+  write(DM_SBADDRESS0, (uint32_t) taddr);
+  for (size_t offset = 0; offset < nbytes; offset += 4) {
+    uint32_t word;
+    memcpy(&word, curr + offset, sizeof(word));
+    write(DM_SBDATA0, word);
+  }
+  uint32_t sbcs;
+  do {
+    sbcs = read(DM_SBCS);
+  } while (sbcs & DM_SBCS_SBBUSY);
+  if (sbcs & (DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR)) {
+    fprintf(stderr, "dtm_sba_write: sbcs=0x%08x for %zu bytes at 0x%llx, retrying through the program buffer\n",
+            sbcs, nbytes, (unsigned long long) taddr);
+    write(DM_SBCS, DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR);
+    return false;
+  }
+  return true;
 }
 
 reg_t read_priv(std::string priv_str) {
