@@ -87,10 +87,13 @@ class testchip_dtm_t : public dtm_t, public testchip_htif_t
   // +dtm_sba_write=1: load_program writes the image through the Debug Module's system-bus master,
   // one auto-incremented sbdata0 write per word, instead of a program-buffer store per word. Only
   // the image load: the zero fill, init writes, MSIP and tohost keep the program-buffer path. On a
-  // system-bus error or busy error the chunk is written again through the program buffer.
+  // system-bus error or busy error the chunk is written again through the program buffer, its data
+  // words one by one and its long zero runs by the hart's clear loop (sba_fallback_write_chunk).
   bool sba_write;
   bool sba_write_active;
   bool sba_write_chunk(addr_t taddr, size_t nbytes, const void* src);
+  static constexpr size_t sba_fallback_min_clear_words = 16;
+  void sba_fallback_write_chunk(addr_t taddr, size_t nbytes, const void* src);
   std::string loadarch_file;
 
   void sba_read_chunk(addr_t taddr, size_t nbytes, void* dst);

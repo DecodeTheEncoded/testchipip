@@ -72,9 +72,56 @@ void testchip_dtm_t::write_chunk(addr_t taddr, size_t nbytes, const void* src)
 {
   if (is_loadmem) {
     load_mem_write(taddr, nbytes, src);
-  } else if (!(sba_write_active && sba_write_chunk(taddr, nbytes, src))) {
+  } else if (!sba_write_active) {
     dtm_t::write_chunk(taddr, nbytes, src);
+  } else if (!sba_write_chunk(taddr, nbytes, src)) {
+    sba_fallback_write_chunk(taddr, nbytes, src);
   }
+}
+
+// A program-buffer write costs at least two DMI accesses per word (the data write and the busy
+// poll), so a chunk the system bus could not write goes back through the program buffer one word
+// at a time only where it holds data. Zero runs of at least sba_fallback_min_clear_words words are
+// cleared by the hart's own store loop instead (dtm_t::clear_chunk, one abstract command); shorter
+// ones cost less written than a separate halt, command and resume. A denied chunk is typically a
+// few words of code and its alignment padding: ZhongLou's RNMI handler chunk is 4 KiB.
+void testchip_dtm_t::sba_fallback_write_chunk(addr_t taddr, size_t nbytes, const void* src)
+{
+  const size_t word = chunk_align();
+  if ((taddr % word) || (nbytes % word)) {
+    dtm_t::write_chunk(taddr, nbytes, src);
+    return;
+  }
+  const uint8_t* bytes = (const uint8_t*) src;
+  const size_t nwords = nbytes / word;
+  auto is_zero = [&](size_t i) {
+    for (size_t b = 0; b < word; b++)
+      if (bytes[i * word + b])
+        return false;
+    return true;
+  };
+  size_t data_start = 0;
+  size_t i = 0;
+  while (i < nwords) {
+    if (!is_zero(i)) {
+      i++;
+      continue;
+    }
+    size_t j = i;
+    while (j < nwords && is_zero(j))
+      j++;
+    if (j - i >= sba_fallback_min_clear_words) {
+      if (i > data_start)
+        dtm_t::write_chunk(taddr + data_start * word, (i - data_start) * word,
+                           bytes + data_start * word);
+      dtm_t::clear_chunk(taddr + i * word, (j - i) * word);
+      data_start = j;
+    }
+    i = j;
+  }
+  if (nwords > data_start)
+    dtm_t::write_chunk(taddr + data_start * word, (nwords - data_start) * word,
+                       bytes + data_start * word);
 }
 
 void testchip_dtm_t::read_chunk(addr_t taddr, size_t nbytes, void* dst)
@@ -130,7 +177,9 @@ void testchip_dtm_t::sba_read_chunk(addr_t taddr, size_t nbytes, void* dst)
 
 // Returns false, with nothing left to clear, when the chunk must go through the program buffer
 // instead: an unaligned chunk, or a system-bus error or busy error (a write to sbdata0 while the
-// previous one was still in flight is dropped and sets sbbusyerror).
+// previous one was still in flight is dropped and sets sbbusyerror). A target may deny the system
+// bus master writes the hart may make (ZhongLou's safety-SRAM guard answers them denied, which sets
+// sberror); the program buffer then writes the chunk as the hart's own stores.
 bool testchip_dtm_t::sba_write_chunk(addr_t taddr, size_t nbytes, const void* src)
 {
   if ((taddr & 3) || (nbytes & 3) || (taddr + nbytes) > (addr_t(1) << 32))
