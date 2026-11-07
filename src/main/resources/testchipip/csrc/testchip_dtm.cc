@@ -180,12 +180,30 @@ void testchip_dtm_t::sba_read_chunk(addr_t taddr, size_t nbytes, void* dst)
 // previous one was still in flight is dropped and sets sbbusyerror). A target may deny the system
 // bus master writes the hart may make (ZhongLou's safety-SRAM guard answers them denied, which sets
 // sberror); the program buffer then writes the chunk as the hart's own stores.
+//
+// The first word is checked before the rest is sent. A denied chunk fails on its first write, and
+// the Debug Module drops every sbdata0 write after an error, so sending the whole chunk first cost
+// one DMI write per word for nothing: 1024 writes, about 2 ms over ZhongLou's JTAG port, for the
+// 4 KiB RNMI handler chunk. Waiting for the first write also lets it wait out a busy target (the
+// SRAM reset scrape) instead of overrunning it.
 bool testchip_dtm_t::sba_write_chunk(addr_t taddr, size_t nbytes, const void* src)
 {
   if ((taddr & 3) || (nbytes & 3) || (taddr + nbytes) > (addr_t(1) << 32))
     return false;
   const uint8_t* curr = (const uint8_t*) src;
-  // sbbusyerror and sberror are write-one-to-clear.
+  auto settled_ok = [&]() {
+    uint32_t sbcs;
+    do {
+      sbcs = read(DM_SBCS);
+    } while (sbcs & DM_SBCS_SBBUSY);
+    if (!(sbcs & (DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR)))
+      return true;
+    fprintf(stderr, "dtm_sba_write: sbcs=0x%08x for %zu bytes at 0x%llx, retrying through the program buffer\n",
+            sbcs, nbytes, (unsigned long long) taddr);
+    // sbbusyerror and sberror are write-one-to-clear.
+    write(DM_SBCS, DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR);
+    return false;
+  };
   write(DM_SBCS, DM_SBCS_SBAUTOINCREMENT | (2 << DM_SBCS_SBACCESS_OFFSET) |
                  DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR);
   write(DM_SBADDRESS0, (uint32_t) taddr);
@@ -193,18 +211,10 @@ bool testchip_dtm_t::sba_write_chunk(addr_t taddr, size_t nbytes, const void* sr
     uint32_t word;
     memcpy(&word, curr + offset, sizeof(word));
     write(DM_SBDATA0, word);
+    if (offset == 0 && nbytes > 4 && !settled_ok())
+      return false;
   }
-  uint32_t sbcs;
-  do {
-    sbcs = read(DM_SBCS);
-  } while (sbcs & DM_SBCS_SBBUSY);
-  if (sbcs & (DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR)) {
-    fprintf(stderr, "dtm_sba_write: sbcs=0x%08x for %zu bytes at 0x%llx, retrying through the program buffer\n",
-            sbcs, nbytes, (unsigned long long) taddr);
-    write(DM_SBCS, DM_SBCS_SBBUSYERROR | DM_SBCS_SBERROR);
-    return false;
-  }
-  return true;
+  return settled_ok();
 }
 
 reg_t read_priv(std::string priv_str) {
